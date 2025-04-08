@@ -32,6 +32,7 @@ if "initialized" not in st.session_state:
     st.session_state.customer_classification = {}
     st.session_state.priority_weights = {}
     st.session_state.last_visit_dates = {}
+    st.session_state.table_name = "customers"
 
 # Sidebar for navigation
 st.sidebar.title("Navigation")
@@ -124,56 +125,6 @@ def generate_pdf_report(weekly_plan, visit_history):
                 pdf.cell(0, 10, f"• {customer['Name']} - {customer['Town']}", ln=True)
         
         pdf.ln(5)
-        # This function should be added to your app.py file
-# It exactly matches your Supabase column structure
-
-def fetch_customers_from_supabase():
-    if not supabase:
-        st.error("Supabase connection not configured")
-        return None
-    
-    try:
-        # Get the table name from session state or use default
-        table_name = st.session_state.get("table_name", "customers")
-        
-        # Fetch all records from your Supabase table
-        response = supabase.table(table_name).select("*").execute()
-        
-        if not response.data:
-            st.warning(f"No data found in table '{table_name}'")
-            return None
-        
-        # Create a DataFrame directly from the response data
-        # Your column names already match what the app expects!
-        df = pd.DataFrame(response.data)
-        
-        # Remove the 'created_at' column which isn't needed by the app
-        if 'created_at' in df.columns:
-            df = df.drop(columns=['created_at'])
-        
-        return df
-    
-    except Exception as e:
-        st.error(f"Error fetching data from Supabase: {e}")
-        return None
-
-# Then in your "Data Connection" page, replace the sample data generation with:
-if st.button("Connect to Database"):
-    customers_df = fetch_customers_from_supabase()
-    if customers_df is not None:
-        st.session_state.customers_df = customers_df
-        st.session_state.initialized = True
-        
-        # Run initial commercial classification
-        st.session_state.customer_classification = classify_commercial_customers(customers_df)
-        commercial_count = sum(1 for c in st.session_state.customer_classification.values() if c == 'commercial')
-        
-        # Initialize priority weights
-        for cust_id in customers_df['Abbn']:
-            st.session_state.priority_weights[cust_id] = 5  # Default priority
-        
-        st.success(f"Connected to database and loaded {len(customers_df)} customers")
-        st.info(f"Initial AI classification identified {commercial_count} commercial customers")
     
     # Visit History Section
     if visit_history:
@@ -264,6 +215,37 @@ def calculate_priority(customer_id):
     
     return priority
 
+# Function to fetch data from Supabase
+def fetch_customers_from_supabase():
+    if not supabase:
+        st.error("Supabase connection not configured")
+        return None
+    
+    try:
+        # Get the table name from session state
+        table_name = st.session_state.table_name
+        
+        # Fetch all records from your Supabase table
+        response = supabase.table(table_name).select("*").execute()
+        
+        if not response.data:
+            st.warning(f"No data found in table '{table_name}'")
+            return None
+        
+        # Create a DataFrame directly from the response data
+        # Your column names already match what the app expects!
+        df = pd.DataFrame(response.data)
+        
+        # Remove the 'created_at' column which isn't needed by the app
+        if 'created_at' in df.columns:
+            df = df.drop(columns=['created_at'])
+        
+        return df
+    
+    except Exception as e:
+        st.error(f"Error fetching data from Supabase: {e}")
+        return None
+
 # Setup page
 if page == "Setup":
     st.title("Setup")
@@ -295,63 +277,25 @@ elif page == "Data Connection":
         # Database table selection
         st.subheader("Select Customer Table")
         table_name = st.text_input("Supabase Table Name", "customers")
-        
-        # Column mapping
-        st.subheader("Map Database Columns")
-        st.write("Match your database columns to the required fields")
-        
-        # These would be retrieved from Supabase in a real implementation
-        sample_columns = ["id", "name", "address", "city", "phone", "mobile", "notes", "customer_type"]
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            id_column = st.selectbox("Customer ID", options=sample_columns, index=0)
-            name_column = st.selectbox("Name", options=sample_columns, index=1)
-            street_column = st.selectbox("Street", options=sample_columns, index=2)
-            town_column = st.selectbox("Town/City", options=sample_columns, index=3)
-        
-        with col2:
-            phone_column = st.selectbox("Phone", options=sample_columns, index=4)
-            mobile_column = st.selectbox("Mobile", options=sample_columns, index=5)
-            other_column = st.selectbox("Other/Notes", options=sample_columns, index=6)
-            type_column = st.selectbox("Customer Type (optional)", options=["None"] + sample_columns, index=7)
+        st.session_state.table_name = table_name
         
         # Connect button
         if st.button("Connect to Database"):
-            try:
-                # In a real implementation, fetch data from Supabase
-                if supabase:
-                    # This is example code - in reality you'd fetch from Supabase
-                    response = supabase.table(table_name).select("*").execute()
-                    
-                    # For demo purposes, create sample data
-                    sample_data = {
-                        'Abbn': [f'CUST{i}' for i in range(1, 101)],
-                        'Name': [f'Customer {i}' for i in range(1, 101)],
-                        'Street': [f'{i} Main St' for i in range(1, 101)],
-                        'Town': ['Cityville' if i % 3 == 0 else 'Townsburg' if i % 3 == 1 else 'Villageton' for i in range(1, 101)],
-                        'Phone': [f'555-{i:03d}-{i*2:04d}' for i in range(1, 101)],
-                        'Mobile': [f'555-{i*3:03d}-{i*4:04d}' for i in range(1, 101)],
-                        'Other': [f'Note {i}' for i in range(1, 101)]
-                    }
-                    df = pd.DataFrame(sample_data)
-                    
-                    st.session_state.customers_df = df
-                    st.session_state.initialized = True
-                    
-                    # Run initial commercial classification
-                    st.session_state.customer_classification = classify_commercial_customers(df)
-                    commercial_count = sum(1 for c in st.session_state.customer_classification.values() if c == 'commercial')
-                    
-                    # Initialize priority weights (random for demo)
-                    for cust_id in df['Abbn']:
-                        st.session_state.priority_weights[cust_id] = np.random.randint(1, 10)
-                    
-                    st.success(f"Connected to database and loaded {len(df)} customers")
-                    st.info(f"Initial AI classification identified {commercial_count} commercial customers")
-            except Exception as e:
-                st.error(f"Error connecting to database: {e}")
+            customers_df = fetch_customers_from_supabase()
+            if customers_df is not None:
+                st.session_state.customers_df = customers_df
+                st.session_state.initialized = True
+                
+                # Run initial commercial classification
+                st.session_state.customer_classification = classify_commercial_customers(customers_df)
+                commercial_count = sum(1 for c in st.session_state.customer_classification.values() if c == 'commercial')
+                
+                # Initialize priority weights
+                for cust_id in customers_df['Abbn']:
+                    st.session_state.priority_weights[cust_id] = 5  # Default priority
+                
+                st.success(f"Connected to database and loaded {len(customers_df)} customers")
+                st.info(f"Initial AI classification identified {commercial_count} commercial customers")
         
         # Display sample of the data
         if st.session_state.customers_df is not None:
@@ -420,9 +364,10 @@ elif page == "Customer Classification":
                     # In a real implementation, save back to Supabase
                     if supabase:
                         try:
-                            # Example code - update classification in Supabase
-                            # supabase.table(table_name).update({"customer_type": new_classification}).eq("id", cust_id).execute()
-                            pass
+                            # Update a custom classification table or field
+                            # This example assumes you create a classifications table
+                            data = {"customer_id": cust_id, "classification": new_classification}
+                            supabase.table("classifications").upsert(data).execute()
                         except Exception as e:
                             st.error(f"Error saving to database: {e}")
             
@@ -447,10 +392,10 @@ elif page == "Customer Classification":
                 # In a real implementation, save back to Supabase
                 if supabase:
                     try:
-                        # Example code - update classifications in Supabase in bulk
-                        # for cust_id in filtered_df['Abbn']:
-                        #     supabase.table(table_name).update({"customer_type": "commercial"}).eq("id", cust_id).execute()
-                        pass
+                        # Batch update classifications
+                        for cust_id in filtered_df['Abbn']:
+                            data = {"customer_id": cust_id, "classification": "commercial"}
+                            supabase.table("classifications").upsert(data).execute()
                     except Exception as e:
                         st.error(f"Error saving to database: {e}")
 
@@ -488,7 +433,7 @@ elif page == "Plan Weekly Visits":
         # Display available customers
         st.subheader("Available Customers")
         
-        # Create a list for drag and drop
+        # Create a list for display and selection
         customer_list = []
         for i, row in filtered_df.iterrows():
             cust_id = row['Abbn']
@@ -559,11 +504,13 @@ elif page == "Plan Weekly Visits":
                             # Extract name from selection string
                             name = sel.split(" (")[0]
                             # Find customer in dataframe
-                            customer_row = df[df['Name'] == name].iloc[0]
-                            # Add to plan if not already there
-                            if not any(c['Name'] == name for c in st.session_state.weekly_plan[day]):
-                                st.session_state.weekly_plan[day].append(customer_row.to_dict())
-                                added += 1
+                            matching_rows = df[df['Name'] == name]
+                            if not matching_rows.empty:
+                                customer_row = matching_rows.iloc[0]
+                                # Add to plan if not already there
+                                if not any(c['Name'] == name for c in st.session_state.weekly_plan[day]):
+                                    st.session_state.weekly_plan[day].append(customer_row.to_dict())
+                                    added += 1
                         
                         if added > 0:
                             st.success(f"Added {added} customers to {day}")
@@ -753,7 +700,7 @@ elif page == "Daily View":
                 nearby_customers = []
                 
                 # Simulate finding nearby commercial customers
-                for i, row in df.iterrows():
+                for i, row in st.session_state.customers_df.iterrows():
                     if row['Abbn'] in st.session_state.customer_classification and st.session_state.customer_classification[row['Abbn']] == 'commercial':
                         address = f"{row['Street']}, {row['Town']}"
                         coords = geocode_address(address)
@@ -821,181 +768,3 @@ elif page == "Daily View":
                 st.session_state.weekly_plan[day] = []
                 st.success(f"Cleared plan for {day}")
                 st.rerun()
-
-# Visit Customer page
-elif page == "Visit Customer":
-    st.title("Customer Visit")
-    
-    if not st.session_state.initialized:
-        st.warning("Please connect to your Supabase database first")
-    elif st.session_state.current_customer is None:
-        st.info("No customer selected. Please select a customer from the Daily View.")
-    else:
-        customer = st.session_state.current_customer
-        
-        # Display customer info
-        st.subheader(f"Visiting: {customer['Name']}")
-        st.write(f"**Address:** {customer['Street']}, {customer['Town']}")
-        st.write(f"**Phone:** {customer['Phone']}")
-        if 'Mobile' in customer and customer['Mobile']:
-            st.write(f"**Mobile:** {customer['Mobile']}")
-        
-        # Map with location
-        if geocoder:
-            address = f"{customer['Street']}, {customer['Town']}"
-            coords = geocode_address(address)
-            
-            if coords:
-                st.subheader("Location")
-                m = folium.Map(location=coords, zoom_start=15)
-                folium.Marker(
-                    location=coords,
-                    popup=customer['Name'],
-                    tooltip=customer['Name'],
-                    icon=folium.Icon(icon="building", prefix="fa")
-                ).add_to(m)
-                folium_static(m)
-        
-        # Notes section
-        st.subheader("Visit Notes")
-        notes = st.text_area("Enter notes about this visit", height=150)
-        
-        # Check-in button
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("Check-in at This Location"):
-                # In a real app, we would get the actual GPS coordinates
-                timestamp = datetime.datetime.now()
-                
-                # Add to visit history
-                visit_record = {
-                    "customer_id": customer['Abbn'],
-                    "customer_name": customer['Name'],
-                    "date": timestamp.strftime("%Y-%m-%d %H:%M"),
-                    "notes": notes,
-                    "location": address
-                }
-                
-                st.session_state.visit_history.append(visit_record)
-                
-                # Update last visit date
-                st.session_state.last_visit_dates[customer['Abbn']] = timestamp
-                
-                # Save to Supabase in a real implementation
-                if supabase:
-                    try:
-                        # Example code - save visit to Supabase
-                        # supabase.table("visits").insert(visit_record).execute()
-                        pass
-                    except Exception as e:
-                        st.error(f"Error saving visit: {e}")
-                
-                st.success("Visit recorded!")
-        
-        with col2:
-            if st.button("Complete Visit"):
-                # Clear current customer and return to daily view
-                st.session_state.current_customer = None
-                st.success("Visit completed!")
-                st.rerun()
-        
-        # Previous visit history
-        st.subheader("Previous Visits")
-        previous_visits = [v for v in st.session_state.visit_history 
-                          if v["customer_id"] == customer['Abbn']]
-        
-        if previous_visits:
-            for visit in previous_visits:
-                st.write(f"**{visit['date']}**: {visit['notes']}")
-        else:
-            st.info("No previous visit records")
-        
-        # Offline support notice
-        st.subheader("Offline Support")
-        st.info("This visit data will be synchronized when you're back online")
-
-# Reports page
-elif page == "Reports":
-    st.title("Reports")
-    
-    if not st.session_state.initialized:
-        st.warning("Please connect to your Supabase database first")
-    else:
-        st.subheader("Visit History")
-        
-        # Filter options
-        date_range = st.date_input(
-            "Select date range",
-            value=(
-                datetime.datetime.now() - datetime.timedelta(days=30),
-                datetime.datetime.now()
-            ),
-            max_value=datetime.datetime.now()
-        )
-        
-        # Filter by date
-        filtered_visits = []
-        for visit in st.session_state.visit_history:
-            visit_date = datetime.datetime.strptime(visit["date"], "%Y-%m-%d %H:%M").date()
-            if date_range[0] <= visit_date <= date_range[1]:
-                filtered_visits.append(visit)
-        
-        # Display visits
-        if filtered_visits:
-            # Convert to dataframe for display
-            visits_df = pd.DataFrame(filtered_visits)
-            st.dataframe(visits_df)
-            
-            # Visualizations
-            st.subheader("Visit Analytics")
-            
-            # Visits by day of week
-            if not visits_df.empty and len(visits_df) > 1:
-                visits_df['weekday'] = pd.to_datetime(visits_df['date']).dt.day_name()
-                
-                days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-                visits_by_day = visits_df['weekday'].value_counts().reindex(days_order, fill_value=0)
-                
-                st.bar_chart(visits_by_day)
-                
-            # Generate report for export
-            export_format = st.selectbox("Export Format", ["PDF", "Excel"])
-            
-            if st.button(f"Generate {export_format} Report"):
-                if export_format == "PDF":
-                    pdf_bytes = generate_pdf_report(st.session_state.weekly_plan, filtered_visits)
-                    
-                    # Create download link
-                    b64_pdf = base64.b64encode(pdf_bytes).decode()
-                    curr_date = datetime.datetime.now().strftime("%Y%m%d")
-                    filename = f"visit_report_{curr_date}.pdf"
-                    
-                    href = f'<a href="data:application/pdf;base64,{b64_pdf}" download="{filename}">Download PDF Report</a>'
-                    st.markdown(href, unsafe_allow_html=True)
-                else:
-                    # Excel export would be implemented here
-                    st.info("Excel export would be available in the full implementation")
-            
-            # Notion/Motion integration
-            st.subheader("Integration Options")
-            
-            integration_type = st.selectbox("Select Integration", ["Notion", "Motion", "None"])
-            
-            if integration_type != "None":
-                if st.button(f"Export to {integration_type}"):
-                    st.success(f"Data exported to {integration_type}!")
-                    # In a real implementation, this would use the respective APIs
-        else:
-            st.info("No visits in the selected date range")
-
-# Run the app
-if __name__ == "__main__":
-    st.sidebar.info("""
-    **About**
-    
-    Customer Visit Planner helps field sales teams plan, 
-    optimize, and track customer visits efficiently.
-    
-    This app is designed to work both online and offline.
-    """)
