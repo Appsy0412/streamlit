@@ -1,0 +1,9 @@
+streamlit
+pandas
+numpy
+supabase
+geopy
+folium
+streamlit-folium
+fpdf
+scikit-learn
