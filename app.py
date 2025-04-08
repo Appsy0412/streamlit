@@ -124,6 +124,56 @@ def generate_pdf_report(weekly_plan, visit_history):
                 pdf.cell(0, 10, f"• {customer['Name']} - {customer['Town']}", ln=True)
         
         pdf.ln(5)
+        # This function should be added to your app.py file
+# It exactly matches your Supabase column structure
+
+def fetch_customers_from_supabase():
+    if not supabase:
+        st.error("Supabase connection not configured")
+        return None
+    
+    try:
+        # Get the table name from session state or use default
+        table_name = st.session_state.get("table_name", "customers")
+        
+        # Fetch all records from your Supabase table
+        response = supabase.table(table_name).select("*").execute()
+        
+        if not response.data:
+            st.warning(f"No data found in table '{table_name}'")
+            return None
+        
+        # Create a DataFrame directly from the response data
+        # Your column names already match what the app expects!
+        df = pd.DataFrame(response.data)
+        
+        # Remove the 'created_at' column which isn't needed by the app
+        if 'created_at' in df.columns:
+            df = df.drop(columns=['created_at'])
+        
+        return df
+    
+    except Exception as e:
+        st.error(f"Error fetching data from Supabase: {e}")
+        return None
+
+# Then in your "Data Connection" page, replace the sample data generation with:
+if st.button("Connect to Database"):
+    customers_df = fetch_customers_from_supabase()
+    if customers_df is not None:
+        st.session_state.customers_df = customers_df
+        st.session_state.initialized = True
+        
+        # Run initial commercial classification
+        st.session_state.customer_classification = classify_commercial_customers(customers_df)
+        commercial_count = sum(1 for c in st.session_state.customer_classification.values() if c == 'commercial')
+        
+        # Initialize priority weights
+        for cust_id in customers_df['Abbn']:
+            st.session_state.priority_weights[cust_id] = 5  # Default priority
+        
+        st.success(f"Connected to database and loaded {len(customers_df)} customers")
+        st.info(f"Initial AI classification identified {commercial_count} commercial customers")
     
     # Visit History Section
     if visit_history:
